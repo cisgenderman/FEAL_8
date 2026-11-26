@@ -7,24 +7,25 @@ module feal_axi (
     input  logic [127:0] key,
     input  logic [63:0]  s_axis_tdata,
     input  logic         s_axis_tvalid,
-    output wire          s_axis_tready,
-    output wire [63:0]   m_axis_tdata,
-    output wire          m_axis_tvalid,
+    output logic         s_axis_tready,
+    output logic [63:0]  m_axis_tdata,
+    output logic         m_axis_tvalid,
     input  logic         m_axis_tready
 );
     typedef enum logic [1:0] {WAIT_INPUT, WAIT_CORE, SEND_OUTPUT} state_t;
     state_t state;
 
     logic [63:0] output_reg;
-    wire [63:0] core_ciphertext;
-    wire core_busy;
-    wire core_done;
+    logic [63:0] core_ciphertext;
+    logic core_busy;
+    logic core_done;
 
     assign s_axis_tready = (state == WAIT_INPUT) && !core_busy;
     assign m_axis_tvalid = (state == SEND_OUTPUT);
     assign m_axis_tdata  = output_reg;
 
-    wire core_start = s_axis_tvalid && s_axis_tready;
+    logic core_start;
+    assign core_start = s_axis_tvalid && s_axis_tready;
 
     feal_core core_inst (
         .clk(clk),

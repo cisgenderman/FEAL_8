@@ -27,8 +27,9 @@ module key_schedule (
     logic [2:0]  step_cnt;
 
     logic [31:0] q;
-    wire  [31:0] beta = b_reg ^ d_reg ^ q;
-    wire  [31:0] fk_result;
+    logic [31:0] beta;
+    logic [31:0] fk_result;
+    assign beta = b_reg ^ d_reg ^ q;
 
     // Steps 0..7 correspond to r=1..8.
     always_comb begin

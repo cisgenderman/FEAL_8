@@ -14,7 +14,7 @@ module feal_core (
     input  logic [127:0] key,
     input  logic [63:0]  plaintext,
     output logic [63:0]  ciphertext,
-    output wire          busy,
+    output logic         busy,
     output logic         done
 );
     localparam logic [1:0] IDLE = 2'd0;
@@ -33,13 +33,15 @@ module feal_core (
     logic [127:0] requested_key;
     logic [63:0]  pending_plaintext;
 
-    wire [255:0] generated_subkeys;
-    wire         ks_busy;
-    wire         ks_done;
-    wire cache_hit = cache_valid && (key == cached_key);
+    logic [255:0] generated_subkeys;
+    logic         ks_busy;
+    logic         ks_done;
+    logic         cache_hit;
+    assign cache_hit = cache_valid && (key == cached_key);
 
     // Only start the generator for a new key. Not triggered by cached hits.
-    wire ks_start = (state == IDLE) && start && !cache_hit;
+    logic ks_start;
+    assign ks_start = (state == IDLE) && start && !cache_hit;
 
     key_schedule ks_inst (
         .clk(clk),
@@ -53,22 +55,27 @@ module feal_core (
 
     // In IDLE the pre-processing uses cached keys and live plaintext.
     // In WAIT_KEYS it uses freshly generated keys and latched plaintext.
-    wire [255:0] init_subkeys =
+    logic [255:0] init_subkeys;
+    logic [63:0]  init_plaintext;
+    assign init_subkeys =
         (state == WAIT_KEYS) ? generated_subkeys : active_subkeys;
-    wire [63:0] init_plaintext =
+    assign init_plaintext =
         (state == WAIT_KEYS) ? pending_plaintext : plaintext;
 
-    wire [31:0] pre_l = {init_subkeys[8*16 +: 16],
-                         init_subkeys[9*16 +: 16]};
-    wire [31:0] pre_r = {init_subkeys[10*16 +: 16],
-                         init_subkeys[11*16 +: 16]};
-    wire [31:0] init_l = init_plaintext[63:32] ^ pre_l;
-    wire [31:0] init_r = init_plaintext[31:0] ^ pre_r ^ init_l;
+    logic [31:0] pre_l, pre_r;
+    logic [31:0] init_l, init_r;
+    assign pre_l  = {init_subkeys[8*16 +: 16],
+                     init_subkeys[9*16 +: 16]};
+    assign pre_r  = {init_subkeys[10*16 +: 16],
+                     init_subkeys[11*16 +: 16]};
+    assign init_l = init_plaintext[63:32] ^ pre_l;
+    assign init_r = init_plaintext[31:0] ^ pre_r ^ init_l;
 
     logic [63:0] lr_reg;
     logic [2:0]  round_cnt;
-    wire  [15:0] current_subkey = active_subkeys[16*round_cnt +: 16];
-    wire  [63:0] round_out;
+    logic [15:0] current_subkey;
+    logic [63:0] round_out;
+    assign current_subkey = active_subkeys[16*round_cnt +: 16];
 
     feal_round round_inst (
         .data_in(lr_reg),
@@ -76,11 +83,13 @@ module feal_core (
         .data_out(round_out)
     );
 
-    wire [31:0] post_l = {active_subkeys[12*16 +: 16],
-                          active_subkeys[13*16 +: 16]};
-    wire [31:0] post_r = {active_subkeys[14*16 +: 16],
-                          active_subkeys[15*16 +: 16]};
-    wire [63:0] finished_block = {
+    logic [31:0] post_l, post_r;
+    logic [63:0] finished_block;
+    assign post_l = {active_subkeys[12*16 +: 16],
+                     active_subkeys[13*16 +: 16]};
+    assign post_r = {active_subkeys[14*16 +: 16],
+                     active_subkeys[15*16 +: 16]};
+    assign finished_block = {
         round_out[31:0] ^ post_l,
         round_out[63:32] ^ round_out[31:0] ^ post_r
     };

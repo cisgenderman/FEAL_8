@@ -15,9 +15,9 @@ module tb_feal;
 
     logic [63:0] s_axis_tdata = '0;
     logic        s_axis_tvalid = 1'b0;
-    wire         s_axis_tready;
-    wire [63:0]  m_axis_tdata;
-    wire         m_axis_tvalid;
+    logic         s_axis_tready;
+    logic [63:0]  m_axis_tdata;
+    logic         m_axis_tvalid;
     logic        m_axis_tready = 1'b1;
 
     feal_axi dut (.*);
