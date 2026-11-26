@@ -1,48 +1,97 @@
-// FEAL-8X key schedule: 128-bit master key -> K0..K15 (16 bits each).
-// Uses the 128-bit FEAL-NX key schedule with N=8 iterations:
-//   Q_r = KR1^KR2 (r=1,4,7,...), KR1 (r=2,5,8,...), KR2 (r=3,6,9,...)
-//   D_r=A_(r-1), A_r=B_(r-1), B_r=fK(A_(r-1), B_(r-1)^D_(r-1)^Q_r)
-// Note: the FEAL-NX PDF mandates N>=32 for the NX designation;
-//       the 8-round/128-bit-key variant is conventionally FEAL-8X.
+// FEAL-8X sequential key schedule: one physical feal_fk instance is reused
+// for eight clock cycles to produce K0..K15 (16 bits each).
+//
+// Protocol:
+//   * start accepted on rising edge if busy==0;
+//   * input key is latched on that edge;
+//   * 8 following rising edges compute 8 FK steps;
+//   * done pulses for one cycle after the eighth step;
+//   * subkeys_flat is held until the next start (or reset).
+//
+// Each K_j occupies subkeys_flat[16*j +: 16], K0 at [15:0].
+// This is the FEAL-NX 128-bit key schedule restricted to N=8 (FEAL-8X).
 module key_schedule (
+    input  logic         clk,
+    input  logic         rst_n,
+    input  logic         start,
     input  logic [127:0] key,
-    output wire [255:0] subkeys_flat
+    output logic [255:0] subkeys_flat,
+    output logic         busy,
+    output logic         done
 );
-    wire [31:0] a [0:8];
-    wire [31:0] b [0:8];
-    wire [31:0] d [0:8];
-    wire [31:0] kr1, kr2;
+    logic [31:0] a_reg;
+    logic [31:0] b_reg;
+    logic [31:0] d_reg;
+    logic [31:0] kr1_reg;
+    logic [31:0] kr2_reg;
+    logic [2:0]  step_cnt;
 
-    assign a[0] = key[127:96];
-    assign b[0] = key[95:64];
-    assign d[0] = 32'b0;
-    assign kr1  = key[63:32];
-    assign kr2  = key[31:0];
+    logic [31:0] q;
+    wire  [31:0] beta = b_reg ^ d_reg ^ q;
+    wire  [31:0] fk_result;
 
-    for (genvar i = 0; i < 8; i = i + 1) begin : stage
-        wire [31:0] q;
-        wire [31:0] beta;
+    // Steps 0..7 correspond to r=1..8.
+    always_comb begin
+        case (step_cnt)
+            3'd0, 3'd3, 3'd6: q = kr1_reg ^ kr2_reg;
+            3'd1, 3'd4, 3'd7: q = kr1_reg;
+            default:          q = kr2_reg; // steps 2 and 5
+        endcase
+    end
 
-        if (i % 3 == 0) begin : q_xor
-            assign q = kr1 ^ kr2;
-        end else if (i % 3 == 1) begin : q_left
-            assign q = kr1;
-        end else begin : q_right
-            assign q = kr2;
+    // Exactly one physical FK instance, not eight cascaded instances.
+    feal_fk fk_inst (
+        .alpha(a_reg),
+        .beta(beta),
+        .result(fk_result)
+    );
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            a_reg        <= '0;
+            b_reg        <= '0;
+            d_reg        <= '0;
+            kr1_reg      <= '0;
+            kr2_reg      <= '0;
+            step_cnt     <= 3'd0;
+            subkeys_flat <= '0;
+            busy         <= 1'b0;
+            done         <= 1'b0;
+        end else begin
+            done <= 1'b0;
+
+            if (!busy) begin
+                if (start) begin
+                    // Capture all of the key, so external changes during
+                    // generation cannot mix two different master keys.
+                    a_reg        <= key[127:96];
+                    b_reg        <= key[95:64];
+                    d_reg        <= 32'd0;
+                    kr1_reg      <= key[63:32];
+                    kr2_reg      <= key[31:0];
+                    step_cnt     <= 3'd0;
+                    subkeys_flat <= '0;
+                    busy         <= 1'b1;
+                end
+            end else begin
+                // B_(r) = FK(A_(r-1), B_(r-1) ^ D_(r-1) ^ Q_r)
+                // A_r = B_(r-1), D_r = A_(r-1)
+                a_reg <= b_reg;
+                d_reg <= a_reg;
+                b_reg <= fk_result;
+
+                // 32-bit B_r = { K_(2*r-2), K_(2*r-1) }.
+                // Store low-numbered subkey in low-numbered bits.
+                subkeys_flat[32*step_cnt +: 32] <=
+                    {fk_result[15:0], fk_result[31:16]};
+
+                if (step_cnt == 3'd7) begin
+                    busy <= 1'b0;
+                    done <= 1'b1;
+                end else begin
+                    step_cnt <= step_cnt + 3'd1;
+                end
+            end
         end
-
-        assign beta = b[i] ^ d[i] ^ q;
-        feal_fk fk_i (
-            .alpha(a[i]),
-            .beta(beta),
-            .result(b[i+1])
-        );
-        assign a[i+1] = b[i];
-        assign d[i+1] = a[i];
-
-        // Each K_j occupies [16*j +: 16], i.e. K0 at the lowest 16 bits.
-        // B_(i+1) = {K_(2*i), K_(2*i+1)} in MSB-first order.
-        
-        assign subkeys_flat[32*i +: 32] = {b[i+1][15:0], b[i+1][31:16]};
     end
 endmodule
