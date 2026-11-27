@@ -1,16 +1,16 @@
 `timescale 1ns/1ps
 
-// FEAL-8X: test vectors from a text file, one fixed 128-bit key.
+// FEAL-8: test vectors from a text file, one fixed 64-bit key.
 // Run from sim/: make clean && make sim
 // Always check exactly 1000 vectors from feal8_test_vectors.txt.
 module tb_feal;
-    localparam logic [127:0] TEST_KEY =
-        128'h00112233445566778899AABBCCDDEEFF;
+    localparam logic [63:0] TEST_KEY =
+        64'h0123456789ABCDEF;
     localparam integer VECTOR_COUNT = 1000;
 
     logic clk = 1'b0;
     logic rst_n = 1'b0;
-    logic [127:0] key = TEST_KEY;
+    logic [63:0] key = TEST_KEY;
 
     logic [63:0] s_axis_tdata = '0;
     logic        s_axis_tvalid = 1'b0;
@@ -84,7 +84,7 @@ module tb_feal;
         while (!$feof(fd) && tested < VECTOR_COUNT) begin
             chars_read = $fgets(line, fd);
             if (chars_read > 0) begin
-                // Example: PT: 00 ... 00,  CT: 7E ... C4
+                // Example: PT: 00 ... 00,  CT: CE ... 52
                 parsed = $sscanf(line,
                     "PT: %h %h %h %h %h %h %h %h,  CT: %h %h %h %h %h %h %h %h",
                     b0, b1, b2, b3, b4, b5, b6, b7,
@@ -106,7 +106,7 @@ module tb_feal;
             $fatal(1, "Only %0d vectors in file; expected %0d", tested, VECTOR_COUNT);
 
         $display("====================================");
-        $display("FEAL-8X test results (one key)");
+        $display("FEAL-8 test results (one key)");
         $display("Vectors checked: %0d", tested);
         $display("Passed:          %0d", tested - failed);
         $display("Failed:          %0d", failed);

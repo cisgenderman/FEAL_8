@@ -2,7 +2,7 @@
 module tb_feal_f;
     logic [31:0] alpha;
     logic [15:0] beta;
-    wire [31:0] result;
+    logic [31:0] result;
     feal_f dut (.alpha(alpha), .beta(beta), .result(result));
     initial begin
         alpha = 32'hF97F1B21;

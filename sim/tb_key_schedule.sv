@@ -1,31 +1,33 @@
 `timescale 1ns/1ps
-// Verify that one sequential FK instance produces exactly the reference
-// 16 subkeys after 8 clock cycles; test key latching and result retention.
+
+// Verify the 64-bit FEAL-8 schedule: 8 FK steps, published 16 subkeys,
+// key latching, stable output and a second independent master key.
 module tb_key_schedule;
     logic clk = 1'b0;
     always #5 clk = ~clk;
 
     logic rst_n = 1'b0;
     logic start = 1'b0;
-    logic [127:0] key = '0;
-    wire [255:0] subkeys_flat;
-    wire busy;
-    wire done;
+    logic [63:0] key = '0;
+    logic [255:0] subkeys_flat;
+    logic busy;
+    logic done;
 
-    localparam logic [127:0] KEY_A = 128'h00112233445566778899AABBCCDDEEFF;
-    localparam logic [127:0] KEY_B = 128'h0123456789ABCDEF0123456789ABCDEF;
+    localparam logic [63:0] KEY_A = 64'h0123456789ABCDEF;
+    localparam logic [63:0] KEY_B = 64'h0011223344556677;
+    // Published subkeys: Handbook of Applied Cryptography, example 7.99.
     localparam logic [255:0] SUBKEYS_A = {
-        16'h7EAF, 16'h3E99, 16'h8BC9, 16'h86B5,
-        16'h4E67, 16'hD19F, 16'h068F, 16'h30C3,
-        16'hCE4A, 16'h6537, 16'h78B0, 16'hEC8E,
-        16'h87C5, 16'hA8D4, 16'hBAF6, 16'hBA8C
+        16'h0CB5, 16'hA8D5, 16'h479B, 16'h22CD,
+        16'h9D4C, 16'hAC50, 16'hECB7, 16'h8B2A,
+        16'hAD25, 16'h26EB, 16'hB9C7, 16'h45A5,
+        16'h1AEC, 16'hF17C, 16'hCA36, 16'hDF3B
     };
-    // Values for KEY_B from the FEAL-NX specification (K0..K15).
+    // Independent software reference, sim/gen_vectors.py.
     localparam logic [255:0] SUBKEYS_B = {
-        16'h653B, 16'hDCA0, 16'h2455, 16'h1BD4,
-        16'hEEAC, 16'h9819, 16'h5E76, 16'hFE40,
-        16'h7ADE, 16'h4EA4, 16'h523B, 16'h88E5,
-        16'h4886, 16'h84E9, 16'h71F9, 16'h7519
+        16'h3456, 16'h8A50, 16'hBBCB, 16'h2C59,
+        16'hBE9B, 16'hD926, 16'h2206, 16'h1DE1,
+        16'h09CB, 16'hA4B5, 16'hD6A2, 16'hA82A,
+        16'h7737, 16'h2540, 16'h6711, 16'hEF9D
     };
 
     key_schedule dut (
@@ -34,7 +36,7 @@ module tb_key_schedule;
     );
 
     task automatic check_schedule(
-        input logic [127:0] master_key,
+        input logic [63:0] master_key,
         input logic [255:0] expected
     );
         integer i;
@@ -45,7 +47,7 @@ module tb_key_schedule;
             @(posedge clk);
             @(negedge clk);
             start = 1'b0;
-            key = ~master_key; // master key must be latched at start
+            key = ~master_key; // Must not affect the ongoing expansion.
             if (busy !== 1'b1 || done !== 1'b0)
                 $fatal(1, "Schedule did not start");
 
@@ -61,7 +63,6 @@ module tb_key_schedule;
                 $fatal(1, "Subkey mismatch: got %064h expected %064h",
                     subkeys_flat, expected);
 
-            // Result must remain valid after done pulse, even when key changes.
             repeat (3) @(negedge clk);
             if (done !== 1'b0 || subkeys_flat !== expected)
                 $fatal(1, "Schedule did not hold subkeys after done");
@@ -71,9 +72,9 @@ module tb_key_schedule;
     initial begin
         repeat (3) @(negedge clk);
         rst_n = 1'b1;
-        check_schedule(KEY_B, SUBKEYS_B);
         check_schedule(KEY_A, SUBKEYS_A);
-        $display("SUCCESS: iterative key_schedule, 8 FK steps, 2 test keys, latched key and held result");
+        check_schedule(KEY_B, SUBKEYS_B);
+        $display("SUCCESS: FEAL-8 key_schedule; published subkeys, 8 FK steps, 2 keys");
         $finish;
     end
 endmodule

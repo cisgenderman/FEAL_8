@@ -4,7 +4,7 @@
 module feal_axi (
     input  logic         clk,
     input  logic         rst_n,
-    input  logic [127:0] key,
+    input  logic [63:0]  key,
     input  logic [63:0]  s_axis_tdata,
     input  logic         s_axis_tvalid,
     output logic         s_axis_tready,

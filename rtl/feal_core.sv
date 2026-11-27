@@ -1,4 +1,4 @@
-// FEAL-8X cryptographic core, independent of AXI-Stream transport.
+// FEAL-8 cryptographic core, independent of AXI-Stream transport.
 //
 // On start (when idle):
 //   - Key cache HIT:  use the saved 256-bit subkeys immediately.
@@ -11,7 +11,7 @@ module feal_core (
     input  logic         clk,
     input  logic         rst_n,
     input  logic         start,
-    input  logic [127:0] key,
+    input  logic [63:0]  key,
     input  logic [63:0]  plaintext,
     output logic [63:0]  ciphertext,
     output logic         busy,
@@ -23,14 +23,14 @@ module feal_core (
 
     logic [1:0] state;
 
-    // Cache: full 128-bit key tag + 256-bit associated subkeys.
-    logic [127:0] cached_key;
+    // Cache: full 64-bit key tag + 256-bit associated subkeys.
+    logic [63:0]  cached_key;
     logic         cache_valid;
     logic [255:0] active_subkeys;
 
     // Preserve the incoming request during a cache miss. The key schedule
     // itself latches the master key on the same accepted start edge.
-    logic [127:0] requested_key;
+    logic [63:0]  requested_key;
     logic [63:0]  pending_plaintext;
 
     logic [255:0] generated_subkeys;
